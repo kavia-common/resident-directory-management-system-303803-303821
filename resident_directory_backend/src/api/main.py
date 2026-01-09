@@ -3,10 +3,12 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routes.auth import router as auth_router
 from src.db.session import get_engine
 
 openapi_tags = [
     {"name": "health", "description": "Service health and basic diagnostics."},
+    {"name": "auth", "description": "Admin authentication (JWT bearer)."},
 ]
 
 app = FastAPI(
@@ -14,7 +16,10 @@ app = FastAPI(
     description=(
         "Backend API for managing a resident directory (residents CRUD) and admin authentication.\n\n"
         "Environment:\n"
-        "- DATABASE_URL (required): PostgreSQL connection string."
+        "- DATABASE_URL (required): PostgreSQL connection string.\n"
+        "- JWT_SECRET (required): Secret used to sign JWT tokens.\n"
+        "- JWT_ALGORITHM (optional): JWT algorithm (default: HS256).\n"
+        "- JWT_EXPIRES_MINUTES (optional): Access token TTL in minutes (default: 60)."
     ),
     version="0.1.0",
     openapi_tags=openapi_tags,
@@ -27,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Routes
+app.include_router(auth_router)
 
 
 @app.on_event("startup")
