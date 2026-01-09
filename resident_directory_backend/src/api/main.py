@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes.auth import router as auth_router
+from src.api.routes.residents import router as residents_router
 from src.db.session import get_engine
 
 openapi_tags = [
     {"name": "health", "description": "Service health and basic diagnostics."},
     {"name": "auth", "description": "Admin authentication (JWT bearer)."},
+    {"name": "residents", "description": "Resident directory management (CRUD + search)."},
 ]
 
 app = FastAPI(
@@ -35,6 +37,7 @@ app.add_middleware(
 
 # Routes
 app.include_router(auth_router)
+app.include_router(residents_router)
 
 
 @app.on_event("startup")
