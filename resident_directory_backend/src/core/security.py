@@ -12,16 +12,22 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def _get_jwt_secret() -> str:
     """
-    Read JWT_SECRET from environment.
+    Read JWT secret from environment.
+
+    Preferred env var:
+      - JWT_SECRET_KEY
+
+    Backward compatible fallback:
+      - JWT_SECRET
 
     Raises:
-        RuntimeError: If JWT_SECRET is missing/blank.
+        RuntimeError: If secret is missing/blank.
     """
-    secret = os.getenv("JWT_SECRET")
+    secret = os.getenv("JWT_SECRET_KEY") or os.getenv("JWT_SECRET")
     if not secret or not secret.strip():
         raise RuntimeError(
-            "JWT_SECRET environment variable is required but was not set. "
-            "Set JWT_SECRET to a long random string."
+            "JWT_SECRET_KEY environment variable is required but was not set. "
+            "Set JWT_SECRET_KEY to a long random string."
         )
     return secret.strip()
 
@@ -32,14 +38,26 @@ def _get_jwt_algorithm() -> str:
 
 
 def _get_jwt_expires_minutes() -> int:
-    """Read JWT_EXPIRES_MINUTES from environment (defaults to 60)."""
-    raw = (os.getenv("JWT_EXPIRES_MINUTES") or "60").strip()
+    """
+    Read access token expiry minutes from environment (defaults to 60).
+
+    Preferred env var:
+      - ACCESS_TOKEN_EXPIRE_MINUTES
+
+    Backward compatible fallback:
+      - JWT_EXPIRES_MINUTES
+    """
+    raw = (
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
+        or os.getenv("JWT_EXPIRES_MINUTES")
+        or "60"
+    ).strip()
     try:
         minutes = int(raw)
     except ValueError as exc:
-        raise RuntimeError("JWT_EXPIRES_MINUTES must be an integer.") from exc
+        raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be an integer.") from exc
     if minutes <= 0:
-        raise RuntimeError("JWT_EXPIRES_MINUTES must be > 0.")
+        raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be > 0.")
     return minutes
 
 
