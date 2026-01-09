@@ -41,6 +41,12 @@ class Resident(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     photo_url: Mapped[str] = mapped_column(Text, nullable=True)
 
+    # Advanced-filter fields (optional). These are used by CSV import/export and query filters.
+    # Note: if your database schema does not yet have these columns, you will need to apply
+    # a migration/ALTER TABLE (outside this code change) for the backend to start successfully.
+    building: Mapped[object] = mapped_column(String(100), nullable=True, index=True)
+    unit: Mapped[object] = mapped_column(String(50), nullable=True, index=True)
+
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
