@@ -15,6 +15,15 @@ class Admin(Base):
     username: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
 
+    # RBAC: currently only "admin" is used by guards, but this enables future roles.
+    role: Mapped[str] = mapped_column(String(50), nullable=False, server_default="admin", index=True)
+
+    # Refresh token rotation support:
+    # - We store only a hash of the latest valid refresh token.
+    # - We also store a "token version" that is embedded in refresh JWTs; bumping it invalidates all outstanding refresh tokens.
+    refresh_token_hash: Mapped[object] = mapped_column(Text, nullable=True)
+    refresh_token_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

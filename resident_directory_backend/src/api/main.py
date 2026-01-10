@@ -76,14 +76,20 @@ app = FastAPI(
     title="Resident Directory Backend API",
     description=(
         "Backend API for managing a resident directory (residents CRUD) and admin authentication.\n\n"
+        "Auth model:\n"
+        "- POST /auth/login returns access+refresh tokens\n"
+        "- Use `Authorization: Bearer <access_token>` on protected endpoints\n"
+        "- POST /auth/refresh rotates refresh tokens\n"
+        "- POST /auth/logout revokes refresh tokens\n\n"
         "Environment:\n"
         "- DATABASE_URL (required): PostgreSQL connection string.\n"
         "- JWT_SECRET_KEY (required): Secret used to sign JWT tokens.\n"
         "- JWT_ALGORITHM (optional): JWT algorithm (default: HS256).\n"
         "- ACCESS_TOKEN_EXPIRE_MINUTES (optional): Access token TTL in minutes (default: 60).\n"
+        "- REFRESH_TOKEN_EXPIRE_DAYS (optional): Refresh token TTL in days (default: 14).\n"
         "- CORS_ALLOWED_ORIGINS (optional): Comma-separated list of allowed frontend origins.\n"
     ),
-    version="0.1.0",
+    version="0.2.0",
     openapi_tags=openapi_tags,
 )
 
