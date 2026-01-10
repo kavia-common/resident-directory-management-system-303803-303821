@@ -29,6 +29,10 @@ class ResidentUpdate(BaseModel):
     address: Optional[str] = Field(None, min_length=1, description="Resident address")
     phone: Optional[str] = Field(None, min_length=1, max_length=50, description="Resident phone number")
     email: Optional[EmailStr] = Field(None, description="Resident email address")
+
+    building: Optional[str] = Field(None, max_length=100, description="Optional building name/identifier")
+    unit: Optional[str] = Field(None, max_length=50, description="Optional unit/apartment identifier")
+
     photo_url: Optional[str] = Field(None, description="Optional URL to resident photo")
 
 
