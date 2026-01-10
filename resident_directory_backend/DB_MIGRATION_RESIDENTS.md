@@ -31,6 +31,13 @@ ALTER TABLE residents ADD COLUMN IF NOT EXISTS unit VARCHAR(50);
 
 ### 2) Indexes for filters + search
 
+Filters / search patterns used by the backend:
+
+- `unit`: exact match (`unit = :unit`) → btree index is effective
+- `building`: partial match (`building ILIKE '%...%'`) → btree index helps only for exact/prefix; at scale prefer pg_trgm
+- `q` (name search): (`name ILIKE '%...%'`) → at scale prefer pg_trgm
+- `email`: case-insensitive exact (`lower(email)=lower(:email)`) → functional index is effective
+
 Exact-match filters (building/unit):
 
 ```sql
@@ -47,7 +54,7 @@ Case-insensitive exact email filter:
 CREATE INDEX IF NOT EXISTS ix_residents_email_lower ON residents (lower(email));
 ```
 
-Optional (recommended at scale): trigram index for faster `ILIKE '%...%'` on name.
+Optional (recommended at scale): trigram indexes for faster `ILIKE '%...%'` on name/building.
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -55,6 +62,10 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 ```sql
 CREATE INDEX IF NOT EXISTS ix_residents_name_trgm ON residents USING gin (name gin_trgm_ops);
+```
+
+```sql
+CREATE INDEX IF NOT EXISTS ix_residents_building_trgm ON residents USING gin (building gin_trgm_ops);
 ```
 
 ## Notes

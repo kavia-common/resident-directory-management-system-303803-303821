@@ -4,7 +4,9 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from src.schemas.resident import ResidentOut
 
 
 class ResidentSortField(str, Enum):
@@ -100,11 +102,23 @@ class ResidentListQuery(BaseModel):
     page: int = Field(default=1, ge=1, description="1-based page index.", examples=[1])
     page_size: int = Field(default=20, ge=1, le=100, description="Items per page (max 100).", examples=[20])
 
+    @model_validator(mode="after")
+    def _validate_ranges(self) -> "ResidentListQuery":
+        """
+        Validate cross-field constraints for list/search query.
+
+        Ensures:
+          - updated_at_from <= updated_at_to when both are provided
+        """
+        if self.updated_at_from and self.updated_at_to and self.updated_at_from > self.updated_at_to:
+            raise ValueError("updated_at_from must be <= updated_at_to")
+        return self
+
 
 class ResidentListResponse(BaseModel):
     """Paginated listing response."""
 
-    items: List[object] = Field(..., description="List of residents (ResidentOut).")
+    items: List[ResidentOut] = Field(..., description="List of residents.")
     page: int = Field(..., description="Current page (1-based).", examples=[1])
     page_size: int = Field(..., description="Page size.", examples=[20])
     total: int = Field(..., description="Total rows matching filters.", examples=[123])

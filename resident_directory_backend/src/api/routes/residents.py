@@ -16,7 +16,7 @@ from fastapi import (
     status,
 )
 from pydantic import EmailStr
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_admin
@@ -62,10 +62,15 @@ def _strip_or_none(val: Optional[str]) -> Optional[str]:
 
 def _apply_text_search(stmt, q: Optional[str]):
     """
-    Apply case-insensitive search across resident fields.
+    Apply case-insensitive text search for the simple `q` parameter.
 
-    This is the existing behavior, extended to also search building/unit if present.
-    We use ILIKE which is supported by PostgreSQL.
+    Per product requirement for this subtask:
+      - `q` matches resident name partial, case-insensitive.
+
+    Notes:
+      - We intentionally keep this narrow (name-only) to align with the requested
+        "search by name/building/unit" UX and to allow leveraging name indexes
+        (e.g., pg_trgm gin index for ILIKE '%...%').
     """
     if not q:
         return stmt
@@ -75,16 +80,7 @@ def _apply_text_search(stmt, q: Optional[str]):
         return stmt
 
     pattern = f"%{query}%"
-    return stmt.where(
-        or_(
-            Resident.name.ilike(pattern),
-            Resident.address.ilike(pattern),
-            Resident.phone.ilike(pattern),
-            Resident.email.ilike(pattern),
-            Resident.building.ilike(pattern),
-            Resident.unit.ilike(pattern),
-        )
-    )
+    return stmt.where(Resident.name.ilike(pattern))
 
 
 def _apply_advanced_filters(
@@ -102,29 +98,39 @@ def _apply_advanced_filters(
     Apply optional advanced filters.
 
     Index-friendliness notes:
-      - For exact filters (building/unit/phone), use equality which can leverage btree indexes.
-      - For email, we use lower(email)=lower(:email) to preserve case-insensitivity, which can
-        be made index-friendly via a functional index on lower(email) in Postgres.
-      - For name partial match, we use ILIKE; for best performance at scale, a trigram index
-        can be added (pg_trgm).
+      - For unit/phone exact filters, use equality which can leverage btree indexes.
+      - For building, we support "exact or ILIKE" (requested). Equality will use btree indexes;
+        ILIKE can be accelerated at scale with pg_trgm if desired.
+      - For email, we use lower(email)=lower(:email) for case-insensitive exact match; can be
+        indexed via a functional index on lower(email).
+      - For name partial match, we use ILIKE; at scale add pg_trgm gin index.
     """
     if name:
-        pattern = f"%{name.strip()}%"
-        if name.strip():
-            stmt = stmt.where(Resident.name.ilike(pattern))
+        n = name.strip()
+        if n:
+            stmt = stmt.where(Resident.name.ilike(f"%{n}%"))
 
     if building:
-        stmt = stmt.where(Resident.building == building.strip())
+        b = building.strip()
+        if b:
+            # Accept either an exact building identifier ("A") or a partial ("Tower")
+            # by using ILIKE. If clients want exact-only, they can pass full value.
+            stmt = stmt.where(Resident.building.ilike(f"%{b}%"))
 
     if unit:
-        stmt = stmt.where(Resident.unit == unit.strip())
+        u = unit.strip()
+        if u:
+            stmt = stmt.where(Resident.unit == u)
 
     if phone:
-        stmt = stmt.where(Resident.phone == phone.strip())
+        p = phone.strip()
+        if p:
+            stmt = stmt.where(Resident.phone == p)
 
     if email:
         e = email.strip()
-        stmt = stmt.where(func.lower(Resident.email) == func.lower(e))
+        if e:
+            stmt = stmt.where(func.lower(Resident.email) == func.lower(e))
 
     if updated_at_from is not None:
         stmt = stmt.where(Resident.updated_at >= updated_at_from)
@@ -263,7 +269,7 @@ def _find_existing_for_upsert(
 def list_residents(
     q: Optional[str] = Query(
         default=None,
-        description="Optional text search (case-insensitive partial match).",
+        description="Optional name search (case-insensitive partial match).",
         max_length=200,
         examples=["smith"],
     ),
@@ -275,9 +281,9 @@ def list_residents(
     ),
     building: Optional[str] = Query(
         default=None,
-        description="Optional building filter (exact match).",
+        description="Optional building filter (exact or ILIKE match).",
         max_length=100,
-        examples=["A"],
+        examples=["A", "Tower"],
     ),
     unit: Optional[str] = Query(
         default=None,
@@ -325,11 +331,16 @@ def list_residents(
     """
     List residents with optional filters, sorting, and pagination.
 
+    This endpoint supports the requested search UX:
+      - `q`: name partial match (case-insensitive)
+      - `building`: exact or partial match via ILIKE
+      - `unit`: exact match
+
     Args:
-        q: Optional broad search query.
+        q: Optional name search query.
         name: Optional partial name filter (case-insensitive).
-        building: Optional exact building filter.
-        unit: Optional exact unit filter.
+        building: Optional building filter (ILIKE).
+        unit: Optional unit filter (exact).
         phone: Optional exact phone filter.
         email: Optional exact email filter (case-insensitive).
         updated_at_from: Optional inclusive updated_at start datetime.
@@ -342,9 +353,16 @@ def list_residents(
         current_admin: Authenticated admin (JWT bearer).
 
     Returns:
-        ResidentListResponse containing items and pagination metadata.
+        ResidentListResponse containing items and pagination metadata:
+        { items: ResidentOut[], total: number, page: number, page_size: number }
     """
     _ = current_admin  # auth guard
+
+    if updated_at_from and updated_at_to and updated_at_from > updated_at_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="updated_at_from must be <= updated_at_to",
+        )
 
     base_stmt = _build_filtered_stmt(
         q=q,
